@@ -111,6 +111,8 @@ You can switch the answering machine on and off with the state `states.ab`. With
 - `tam` and `index` identify the message: the number of the answering machine (0 = the first) and the number of the message on it.
 - `new` is `1` as long as the message was not listened to.
 
+To mark a message as read, write `<tam>,<index>` into `states.abMarkRead`, e.g. `0,3` for the message 3 of the first answering machine. `0,3,0` marks it as unread again (`0`, `false` and `off` mean unread). Afterwards the adapter reads the message lists again, so `states.abMessages` and `states.abNewMessages` follow.
+
 Both states are refreshed with the call lists, at least once a minute and right after a call.
 
 ### Call monitor
@@ -247,6 +249,7 @@ If you switch from the adapter tr-064-community, you can copy the complete devic
 -->
 ### **WORK IN PROGRESS**
 * (@jb-io) Added `states.abMessages`: the messages of all answering machines as JSON
+* (@jb-io) Added `states.abMarkRead`: marks a message of the answering machine as read or unread
 * (@GermanBluefox) Fixed: writing `<index>,0` (or `false`, `off`) into `states.ab` switches the answering machine off instead of on
 * (@GermanBluefox) Fixed: after a restart the answering machine selected in `states.abIndex` is used again instead of the first one
 

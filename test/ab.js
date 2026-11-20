@@ -37,6 +37,26 @@ function setAB(val, abIndex) {
     return args;
 }
 
+/** Calls markABMessage with a fake client and returns the arguments of MarkMessage, the warnings and the refreshes */
+function markABMessage(val, markTAMMessage = (args, cb) => cb(null, {})) {
+    const result = { args: undefined, warnings: 0, refreshes: 0 };
+    const client = {
+        adapter: {
+            log: { debug: () => {}, warn: () => result.warnings++ },
+            callbackTimers: { wrap: (_timeout, cb) => cb },
+        },
+        markTAMMessage: markTAMMessage
+            ? (args, cb) => {
+                  result.args = args;
+                  markTAMMessage(args, cb);
+              }
+            : undefined,
+        refreshTAMMessages: () => result.refreshes++,
+    };
+    TR064Client.prototype.markABMessage.call(client, val);
+    return result;
+}
+
 describe('answering machine', () => {
     it('reads "0", "false" and "off" as off', () => {
         for (const val of [false, 0, '', '0', 'false', 'FALSE', 'off', ' 0 ']) {
@@ -116,5 +136,48 @@ describe('answering machine messages', () => {
             msg(0, 1, '18.11.26 17:42'),
             msg(0, 0, '31.12.25 23:59'),
         ]);
+    });
+});
+
+describe('mark answering machine messages', () => {
+    it('marks "<tam>,<index>" as read and reads the lists again', () => {
+        const result = markABMessage('0,3');
+        assert.deepStrictEqual(result.args, { NewIndex: 0, NewMessageIndex: 3, NewMarkedAsRead: 1 });
+        assert.strictEqual(result.refreshes, 1);
+        assert.strictEqual(result.warnings, 0);
+        assert.deepStrictEqual(markABMessage(' 1 , 12 ').args, {
+            NewIndex: 1,
+            NewMessageIndex: 12,
+            NewMarkedAsRead: 1,
+        });
+    });
+
+    it('marks as unread with "0", "false" and "off"', () => {
+        for (const off of ['0', 'false', 'off']) {
+            assert.strictEqual(markABMessage(`0,3,${off}`).args.NewMarkedAsRead, 0, off);
+        }
+        for (const on of ['1', 'true', 'on']) {
+            assert.strictEqual(markABMessage(`0,3,${on}`).args.NewMarkedAsRead, 1, on);
+        }
+    });
+
+    it('rejects other values', () => {
+        for (const val of ['', '3', '0,', ',3', 'a,3', '0,-1', '0,1.5', '0,3,1,1', true, 3]) {
+            const result = markABMessage(val);
+            assert.strictEqual(result.args, undefined, JSON.stringify(val));
+            assert.strictEqual(result.warnings, 1, JSON.stringify(val));
+        }
+    });
+
+    it('warns on a box without MarkMessage', () => {
+        const result = markABMessage('0,3', null);
+        assert.strictEqual(result.warnings, 1);
+        assert.strictEqual(result.refreshes, 0);
+    });
+
+    it('warns on an error of the box and still reads the lists again', () => {
+        const result = markABMessage('0,3', (args, cb) => cb({ message: 'fault' }));
+        assert.strictEqual(result.warnings, 1);
+        assert.strictEqual(result.refreshes, 1);
     });
 });

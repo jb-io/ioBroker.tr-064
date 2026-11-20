@@ -83,6 +83,12 @@ export const STATES: Record<string, StateDefinition> = {
             desc: 'Messages of all answering machines as JSON, the newest first',
         },
     },
+    abMarkRead: {
+        name: 'abMarkRead',
+        val: '',
+        common: { desc: 'parameter: tam, index [, read] of a message in abMessages' },
+        native: { func: 'markABMessage' },
+    },
     ring: {
         name: 'ring',
         val: '**610',

@@ -149,8 +149,12 @@ export class TR064Client extends TR064 {
     private setEnableAB!: Action;
     private getTAMList!: Action;
     private getTAMMessageList!: Action;
+    /** `MarkMessage` of the answering machine, `undefined` if the box does not offer it */
+    private markTAMMessage: Action | undefined;
     /** Set while `refreshTAMMessages()` runs, so that two refreshes do not overlap */
     private tamRefreshRunning = false;
+    /** Set when a refresh was requested while one was running - it runs again afterwards */
+    private tamRefreshPending = false;
     private getSpecificHostEntry!: Action;
     private getGenericHostEntry!: Action;
     private GetSpecificHostEntryExt!: Action;
@@ -380,6 +384,8 @@ export class TR064Client extends TR064 {
                 device,
                 'services.urn:dslforum-org:service:X_AVM-DE_TAM:1.actions.GetMessageList',
             );
+            // like `reboot` not through `safe()`: a missing action would report success without marking anything
+            this.markTAMMessage = device.services['urn:dslforum-org:service:X_AVM-DE_TAM:1']?.actions.MarkMessage;
 
             this.voip = this.sslDevice.services['urn:dslforum-org:service:X_VoIP:1']?.actions;
 
@@ -463,10 +469,21 @@ export class TR064Client extends TR064 {
      */
     public refreshTAMMessages(done?: () => void): void {
         if (this.tamRefreshRunning) {
+            // e.g. a message was marked while the lists were read: read them again afterwards
+            this.tamRefreshPending = true;
             done?.();
             return;
         }
         this.tamRefreshRunning = true;
+        this.tamRefreshPending = false;
+
+        const finish = (): void => {
+            this.tamRefreshRunning = false;
+            done?.();
+            if (this.tamRefreshPending) {
+                this.refreshTAMMessages();
+            }
+        };
 
         this.getTAMList(
             this.adapter.callbackTimers.wrap<ActionResult>(3000, (err, data) => {
@@ -478,9 +495,8 @@ export class TR064Client extends TR064 {
                     const next = (): void => {
                         const tam = tams.shift();
                         if (tam === undefined) {
-                            this.tamRefreshRunning = false;
                             if (!readable) {
-                                done?.();
+                                finish();
                                 return;
                             }
                             if (!unreadable) {
@@ -490,7 +506,7 @@ export class TR064Client extends TR064 {
                                 );
                             }
                             const count = messages.filter(message => message.new === '1').length;
-                            this.adapter.devStates.setAndUpdate(STATES.abNewMessages.name, count, () => done?.());
+                            this.adapter.devStates.setAndUpdate(STATES.abNewMessages.name, count, finish);
                             return;
                         }
 
@@ -544,6 +560,40 @@ export class TR064Client extends TR064 {
                     }
                     cb(getMessages(json, tam));
                 });
+            }),
+        );
+    }
+
+    /**
+     * Marks a message of an answering machine as read or unread. `val` is `<tam>,<index>[,<read>]` with `tam` and
+     * `index` of `states.abMessages`; without `<read>` the message is marked as read, `0`, `false` and `off` mark it
+     * as unread. Afterwards the message lists are read again, so `abMessages` and `abNewMessages` follow.
+     */
+    public markABMessage(val: ioBroker.StateValue): void {
+        const ar = typeof val === 'string' ? val.replace(/\s/g, '').split(',') : [];
+        if (ar.length < 2 || ar.length > 3 || !/^\d+$/.test(ar[0]) || !/^\d+$/.test(ar[1])) {
+            this.adapter.log.warn('states.abMarkRead expects "<tam>,<index>[,<read>]", e.g. "0,3"');
+            return;
+        }
+        if (!this.markTAMMessage) {
+            this.adapter.log.warn('The FRITZ!Box cannot mark the messages of the answering machine (MarkMessage)');
+            return;
+        }
+
+        const tam = ~~Number(ar[0]);
+        const index = ~~Number(ar[1]);
+        // the part after the comma is a string: "0", "false" and "off" must mark as unread
+        const read = ar.length < 3 || isOn(ar[2]);
+        this.adapter.log.debug(`Mark message ${index} of answering machine ${tam} as ${read ? 'read' : 'unread'}`);
+        this.markTAMMessage(
+            { NewIndex: tam, NewMessageIndex: index, NewMarkedAsRead: read ? 1 : 0 },
+            this.adapter.callbackTimers.wrap<ActionResult>(3000, err => {
+                if (err) {
+                    this.adapter.log.warn(
+                        `Cannot mark the message of the answering machine: ${typeof err === 'string' ? err : err.message}`,
+                    );
+                }
+                this.refreshTAMMessages();
             }),
         );
     }

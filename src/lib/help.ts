@@ -62,6 +62,8 @@ States (tr-064.0.*), written with ack false; ignored while the box is not connec
 - states.abMessages (read only): the messages of all answering machines as JSON, the newest first, with the fields
   of the box: [{index, tam, called, date ("dd.mm.yy hh:mm"), duration, inbook, name, new ("1" = not listened yet),
   number, path, tamName (name of the answering machine)}].
+- states.abMarkRead: "<tam>,<index>" marks that message of states.abMessages as read, "<tam>,<index>,0" as unread
+  (0, false, off = unread); abMessages and abNewMessages follow.
 - Read: states.abNewMessages, states.externalIP, externalIPv6, boxModel, boxFirmware, wanAccessType, wanLinkStatus,
   wanProvider, wanDownstreamMax, wanUpstreamMax, wanSendRate, wanReceiveRate; devices.<name>.active (a device of the
   tab "Devices" is online), accessPoint, connection; presence.persons.<name>.present, presence.present, allPresent,
