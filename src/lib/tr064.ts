@@ -15,6 +15,8 @@ import { refresh, ROOT as CALLLIST_ROOT } from './calllist';
 import { getJson, getProp, getXml, isOn, normalizeMac, parseXml, safeFunction, splitMacs } from './utils';
 import type { MeshList } from './mesh';
 import { CHANNEL_STATES, STATES } from './states';
+import { getMessages, sortMessages, visibleTams } from './tam';
+import type { TamInfo } from './tam';
 import type {
     DeviceConfigEntry,
     DeviceLogEvent,
@@ -23,6 +25,7 @@ import type {
     HostEntry,
     HostListXml,
     TamListXml,
+    TamMessage,
     TamMessageListXml,
     WlanSecurity,
 } from './types';
@@ -449,12 +452,14 @@ export class TR064Client extends TR064 {
     }
 
     /**
-     * Counts the new messages of all answering machines and writes `states.abNewMessages`.
+     * Reads the messages of all answering machines and writes `states.abMessages` (the list as JSON, the newest
+     * first) and `states.abNewMessages` (the number of new messages).
      *
      * A message with `<New>1</New>` has not been listened to yet. The box clears the flag when the
      * message is played (e.g. on a FRITZ!Fon), so the number goes down again with the next refresh.
      * The AVM documentation describes `New` the other way round, which does not match the boxes.
-     * The state is only written if at least one message list could be read.
+     * `abNewMessages` is only written if at least one message list could be read, `abMessages` only if all of them
+     * could be read - otherwise the messages of one answering machine would disappear for one refresh.
      */
     public refreshTAMMessages(done?: () => void): void {
         if (this.tamRefreshRunning) {
@@ -465,26 +470,36 @@ export class TR064Client extends TR064 {
 
         this.getTAMList(
             this.adapter.callbackTimers.wrap<ActionResult>(3000, (err, data) => {
-                this.getTAMIndexes(err ? undefined : data?.NewTAMList, indexes => {
-                    let count = 0;
+                this.getTAMs(err ? undefined : data?.NewTAMList, tams => {
+                    const messages: TamMessage[] = [];
                     let readable = 0;
+                    let unreadable = 0;
 
                     const next = (): void => {
-                        const index = indexes.shift();
-                        if (index === undefined) {
+                        const tam = tams.shift();
+                        if (tam === undefined) {
                             this.tamRefreshRunning = false;
                             if (!readable) {
                                 done?.();
                                 return;
                             }
+                            if (!unreadable) {
+                                this.adapter.devStates.set(
+                                    STATES.abMessages.name,
+                                    JSON.stringify(sortMessages(messages)),
+                                );
+                            }
+                            const count = messages.filter(message => message.new === '1').length;
                             this.adapter.devStates.setAndUpdate(STATES.abNewMessages.name, count, () => done?.());
                             return;
                         }
 
-                        this.countNewTAMMessages(index, newMessages => {
-                            if (newMessages !== undefined) {
+                        this.readTAMMessages(tam, list => {
+                            if (list) {
                                 readable++;
-                                count += newMessages;
+                                messages.push(...list);
+                            } else {
+                                unreadable++;
                             }
                             next();
                         });
@@ -496,25 +511,21 @@ export class TR064Client extends TR064 {
         );
     }
 
-    /** Indexes of the answering machines which are shown in the web interface, out of `GetList` */
-    private getTAMIndexes(tamList: string | undefined, cb: (indexes: number[]) => void): void {
+    /** The answering machines which are shown in the web interface, out of `GetList` */
+    private getTAMs(tamList: string | undefined, cb: (tams: TamInfo[]) => void): void {
         if (!tamList) {
             // a firmware without `GetList` (added 2016) has only the first answering machine
-            cb([0]);
+            cb([{ index: 0, name: '' }]);
             return;
         }
 
-        parseXml<TamListXml>(tamList, (_err, json) => {
-            const items = json?.list?.item;
-            const list = Array.isArray(items) ? items : items ? [items] : [];
-            cb(list.filter(item => item.display === '1').map(item => ~~Number(item.index)));
-        });
+        parseXml<TamListXml>(tamList, (_err, json) => cb(visibleTams(json?.list?.item)));
     }
 
-    /** Counts the new messages of one answering machine - `undefined` if its list cannot be read */
-    private countNewTAMMessages(index: number, cb: (count: number | undefined) => void): void {
+    /** Reads the messages of one answering machine - `undefined` if its list cannot be read */
+    private readTAMMessages(tam: TamInfo, cb: (messages: TamMessage[] | undefined) => void): void {
         this.getTAMMessageList(
-            { NewIndex: index },
+            { NewIndex: tam.index },
             this.adapter.callbackTimers.wrap<ActionResult>(3000, (err, data) => {
                 const url = data?.NewURL;
                 // like the call list, the message list is only read by http
@@ -526,14 +537,12 @@ export class TR064Client extends TR064 {
                 getXml<TamMessageListXml>(url, (httpErr, json) => {
                     if (httpErr) {
                         this.adapter.log.debug(
-                            `Cannot read the messages of answering machine ${index}: ${httpErr.message}`,
+                            `Cannot read the messages of answering machine ${tam.index}: ${httpErr.message}`,
                         );
                         cb(undefined);
                         return;
                     }
-                    const messages = json?.root?.message;
-                    const list = Array.isArray(messages) ? messages : messages ? [messages] : [];
-                    cb(list.filter(message => message.new === '1').length);
+                    cb(getMessages(json, tam));
                 });
             }),
         );

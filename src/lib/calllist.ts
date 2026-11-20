@@ -48,7 +48,7 @@ function createCallList(type: CallListName): CallList {
 }
 
 /** `dd.mm.yy hh:mm` of the call list as sortable `yymmddhhmm`, empty if the date has another form */
-function dateKey(date?: string): string {
+export function dateKey(date?: string): string {
     const m = /^(\d\d)\.(\d\d)\.(\d\d) (\d\d):(\d\d)/.exec(date ?? '');
     return m ? `${m[3]}${m[2]}${m[1]}${m[4]}${m[5]}` : '';
 }

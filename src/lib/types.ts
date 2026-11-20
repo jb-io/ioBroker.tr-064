@@ -326,6 +326,13 @@ export interface TamMessage {
     date: string;
     /** `1` if the message has not been listened to yet - contrary to the AVM documentation */
     new: string;
+    called?: string;
+    duration?: string;
+    inbook?: string;
+    path?: string;
+    /** Added by the adapter: the name of the answering machine */
+    tamName?: string;
+    [key: string]: unknown;
 }
 
 /** Message list of `X_AVM-DE_TAM:GetMessageList` converted to JSON - `root` is `''` without messages */

@@ -102,6 +102,17 @@ For a longer history, switch on a history instance (history, sql or influxdb) fo
 
 You can switch the answering machine on and off with the state `states.ab`. With the state `states.abIndex` you select the number of the answering machine (0 = the first). Alternatively write `<index>,<on>` into `states.ab`, e.g. `1,0` switches the second answering machine off (`0`, `false` and `off` mean off).
 
+`states.abNewMessages` is the number of messages which were not listened to yet. `states.abMessages` lists the messages of all answering machines which are shown in the web interface of the Fritz!Box as JSON, the newest first. Like the call lists, every message has the fields of the Fritz!Box; the adapter only adds `tamName`, the name of the answering machine:
+
+```json
+[{ "index": "3", "tam": "0", "called": "987654", "date": "19.11.26 08:05", "duration": "0:01", "inbook": "1", "name": "Max Mustermann", "new": "1", "number": "0301234567", "path": "/download.lua?path=/data/tam/rec/rec.0.003", "tamName": "Anrufbeantworter" }]
+```
+
+- `tam` and `index` identify the message: the number of the answering machine (0 = the first) and the number of the message on it.
+- `new` is `1` as long as the message was not listened to.
+
+Both states are refreshed with the call lists, at least once a minute and right after a call.
+
 ### Call monitor
 
 The call monitor creates states in real time for every incoming and outgoing call. If the phone book is switched on, which is the default setting, the adapter resolves the numbers into names. There is also a state that shows a ringing telephone.
@@ -235,6 +246,7 @@ If you switch from the adapter tr-064-community, you can copy the complete devic
     ### **WORK IN PROGRESS**
 -->
 ### **WORK IN PROGRESS**
+* (@jb-io) Added `states.abMessages`: the messages of all answering machines as JSON
 * (@GermanBluefox) Fixed: writing `<index>,0` (or `false`, `off`) into `states.ab` switches the answering machine off instead of on
 * (@GermanBluefox) Fixed: after a restart the answering machine selected in `states.abIndex` is used again instead of the first one
 

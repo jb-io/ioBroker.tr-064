@@ -74,6 +74,15 @@ export const STATES: Record<string, StateDefinition> = {
         val: 0,
         common: { role: 'value', write: false, desc: 'Number of new messages on all answering machines' },
     },
+    abMessages: {
+        name: 'abMessages',
+        val: '[]',
+        common: {
+            role: 'json',
+            write: false,
+            desc: 'Messages of all answering machines as JSON, the newest first',
+        },
+    },
     ring: {
         name: 'ring',
         val: '**610',

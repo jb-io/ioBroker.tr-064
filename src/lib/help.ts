@@ -59,6 +59,9 @@ States (tr-064.0.*), written with ack false; ignored while the box is not connec
   the answer (JSON) is written into states.commandResult.
 - phonebook.number or phonebook.name: write a number or a name; the adapter writes name, number and image of the
   contact it found into phonebook.* (only with the phone book switched on).
+- states.abMessages (read only): the messages of all answering machines as JSON, the newest first, with the fields
+  of the box: [{index, tam, called, date ("dd.mm.yy hh:mm"), duration, inbook, name, new ("1" = not listened yet),
+  number, path, tamName (name of the answering machine)}].
 - Read: states.abNewMessages, states.externalIP, externalIPv6, boxModel, boxFirmware, wanAccessType, wanLinkStatus,
   wanProvider, wanDownstreamMax, wanUpstreamMax, wanSendRate, wanReceiveRate; devices.<name>.active (a device of the
   tab "Devices" is online), accessPoint, connection; presence.persons.<name>.present, presence.present, allPresent,
